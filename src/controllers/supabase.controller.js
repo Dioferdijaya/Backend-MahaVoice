@@ -236,4 +236,85 @@ const registerUser = async (req, res, next) => {
   }
 };
 
-module.exports = { getSupabaseStatus, loginUser, registerUser };
+const updateProfile = async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ success: false, message: 'Supabase belum dikonfigurasi' });
+    }
+
+    const { userId, nama, npm, email } = req.body;
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'userId wajib diisi' });
+    }
+
+    const updateData = {};
+    if (nama !== undefined) updateData.nama = String(nama).trim();
+    if (npm !== undefined) updateData.npm = String(npm).trim();
+    if (email !== undefined) updateData.email = String(email).trim().toLowerCase();
+
+    const { data: updated, error } = await supabase
+      .from(USERS_TABLE)
+      .update(updateData)
+      .eq('id_user', userId)
+      .select('*')
+      .single();
+
+    if (error || !updated) {
+      return res.status(500).json({ success: false, message: 'Gagal memperbarui profil', error: error?.message });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Profil berhasil diperbarui',
+      user: sanitizeUser(updated),
+    });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+const changePassword = async (req, res, next) => {
+  try {
+    if (!supabase) {
+      return res.status(500).json({ success: false, message: 'Supabase belum dikonfigurasi' });
+    }
+
+    const { userId, currentPassword, newPassword } = req.body;
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'userId, currentPassword, dan newPassword wajib diisi' });
+    }
+
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ success: false, message: 'Password baru minimal 8 karakter' });
+    }
+
+    const { data: user, error: fetchError } = await supabase
+      .from(USERS_TABLE)
+      .select('*')
+      .eq('id_user', userId)
+      .maybeSingle();
+
+    if (fetchError || !user) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    if (!isSamePassword(currentPassword, user)) {
+      return res.status(401).json({ success: false, message: 'Password saat ini salah' });
+    }
+
+    const { error: updateError } = await supabase
+      .from(USERS_TABLE)
+      .update({ password: String(newPassword) })
+      .eq('id_user', userId);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Gagal mengubah password', error: updateError.message });
+    }
+
+    return res.status(200).json({ success: true, message: 'Password berhasil diubah' });
+  } catch (err) {
+    return next(err);
+  }
+};
+
+module.exports = { getSupabaseStatus, loginUser, registerUser, updateProfile, changePassword };
